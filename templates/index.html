@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Match Result Predictor ⚽🔮</title>
+    <meta name="description" content="Prédictions IA pour la Coupe du Monde FIFA 2026 — Elo + XGBoost + Top 11">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #090d16 0%, #0f1026 50%, #090d16 100%);
+            --card-bg: rgba(22, 28, 45, 0.6);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --win-color: #10b981;
+            --draw-color: #f59e0b;
+            --lose-color: #ef4444;
+            --correct-bg: rgba(16, 185, 129, 0.08);
+            --wrong-bg: rgba(239, 68, 68, 0.08);
+            --table-border: rgba(255, 255, 255, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            background-attachment: fixed;
+            color: var(--text-main);
+            padding: 30px 15px 80px;
+            min-height: 100vh;
+        }
+
+        .container { width: 100%; max-width: 900px; margin: 0 auto; }
+
+        /* ── HEADER ── */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header-badge {
+            display: inline-block;
+            background: var(--accent-glow);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #a5b4fc;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 100px;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 2.8rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(to right, #ffffff 30%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* ── STATS BANNER ── */
+        .stats-banner {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 16px 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #a5b4fc;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .accuracy-value { color: var(--win-color) !important; }
+
+        /* ── TABS ── */
+        .tabs-nav {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 600;
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .tab-btn.active {
+            background: var(--accent-glow);
+            border-color: rgba(99, 102, 241, 0.4);
+            color: #a5b4fc;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+        }
+
+        /* ── GROUP VIEW LAYOUT ── */
+        .group-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 24px;
+            justify-content: center;
+        }
+
+        .group-pill {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            padding: 5px 12px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .group-pill.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--accent);
+            color: #f8fafc;
+        }
+
+        .group-section {
+            margin-bottom: 40px;
+        }
+
+        .group-header {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #a5b4fc;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .group-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .group-grid {
+                grid-template-columns: 1.2fr 0.8fr;
+            }
+        }
+
+        /* ── STANDINGS TABLE ── */
+        .standings-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 16px;
+            align-self: start;
+        }
+
+        .standings-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            letter-spacing: 0.04em;
+        }
+
+        .standings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            text-align: center;
+        }
+
+        .standings-table th {
+            color: var(--text-muted);
+            font-weight: 500;
+            padding: 6px;
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        .standings-table td {
+            padding: 8px 6px;
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        .standings-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .team-col {
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .pos-col {
+            font-weight: 600;
+            color: var(--text-muted);
+            width: 20px;
+        }
+
+        .pts-col {
+            font-weight: 700;
+            color: #cbd5e1;
+        }
+
+        /* ── MATCH CARD ── */
+        .match-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            position: relative;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .match-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(99, 102, 241, 0.25);
+        }
+
+        .match-card.has-result { border-color: rgba(16, 185, 129, 0.25); }
+        .match-card.correct { background: var(--correct-bg); }
+        .match-card.wrong { background: var(--wrong-bg); }
+
+        .match-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .match-date {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .match-stage-badge {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 100px;
+            background: rgba(99, 102, 241, 0.1);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .match-teams {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .team-side {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            text-align: center;
+        }
+
+        .team-side.home { align-items: flex-end; text-align: right; }
+        .team-side.away { align-items: flex-start; text-align: left; }
+
+        .team-flag-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .team-side.home .team-flag-name { flex-direction: row; }
+        .team-side.away .team-flag-name { flex-direction: row-reverse; }
+
+        .card-flag { font-size: 1.4rem; }
+        .card-code {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .score-middle {
+            font-size: 1.3rem;
+            font-weight: 800;
+            padding: 4px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            margin: 0 10px;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .score-middle.correct-text { color: var(--win-color); }
+        .score-middle.wrong-text { color: var(--lose-color); }
+
+        .elo-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        /* ── PROBABILITIES ── */
+        .prob-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .prob-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 10px;
+            padding: 8px 4px;
+            text-align: center;
+            position: relative;
+        }
+
+        .prob-item.fav::after {
+            content: '✦';
+            position: absolute;
+            top: 4px; right: 6px;
+            font-size: 0.55rem;
+            color: var(--draw-color);
+        }
+
+        .prob-label {
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .prob-val {
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+
+        .prob-item.win-prob .prob-val { color: var(--win-color); }
+        .prob-item.draw-prob .prob-val { color: var(--draw-color); }
+        .prob-item.lose-prob .prob-val { color: var(--lose-color); }
+
+        /* ── TIPS DE LA COQS ── */
+        .coqs-tips {
+            background: rgba(99, 102, 241, 0.08);
+            border-left: 3px solid var(--accent);
+            padding: 10px 14px;
+            border-radius: 0 10px 10px 0;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            color: #cbd5e1;
+            margin-bottom: 14px;
+        }
+
+        .coqs-tips strong { color: #a5b4fc; }
+
+        /* ── PANEL DE SAISIE ── */
+        .saisie-panel {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .saisie-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-score {
+            width: 48px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            text-align: center;
+            font-size: 1.05rem;
+            font-weight: 700;
+            padding: 5px;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .input-score:focus { border-color: var(--accent); }
+
+        .btn-enregistrer {
+            background: var(--accent);
+            color: #ffffff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-enregistrer:hover { background: #4f46e5; }
+
+        .tab-selector {
+            font-size: 0.72rem;
+            background: #111422;
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 5px;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        /* ── VERTICAL TIMELINE FOR KNOCKOUT ── */
+        .timeline-container {
+            position: relative;
+            padding-left: 20px;
+            border-left: 2px solid rgba(255, 255, 255, 0.05);
+            margin-left: 10px;
+        }
+
+        .timeline-stage-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #a5b4fc;
+            margin: 30px 0 15px -20px;
+            padding-left: 20px;
+            position: relative;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .timeline-stage-title::before {
+            content: '';
+            position: absolute;
+            left: -6px; top: 6px;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        /* ── TOAST ── */
+        .toast {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            background: #111827;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--win-color);
+            padding: 12px 18px;
+            border-radius: 12px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transform: translateY(120%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 1000;
+        }
+
+        .toast.show { transform: translateY(0); }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- HEADER -->
+        <header>
+            <div class="header-badge">⚽ Coupe du Monde FIFA 2026</div>
+            <h1>Match Result Predictor</h1>
+            <div class="subtitle">Modèle XGBoost Dynamique + Elo + Top 11 Joueurs</div>
+        </header>
+
+        <!-- STATS -->
+        <div class="stats-banner">
+            <div class="stat-card">
+                <span class="stat-value">{{ stats.total }}</span>
+                <div class="stat-label">Matchs</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ stats.played }}</span>
+                <div class="stat-label">Joués</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">{{ stats.correct }}</span>
+                <div class="stat-label">Corrects</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value accuracy-value">{{ stats.accuracy }}%</span>
+                <div class="stat-label">Précision</div>
+            </div>
+        </div>
+
+        <!-- TABS NAV -->
+        <div class="tabs-nav">
+            <button class="tab-btn active" id="btn-poules" onclick="switchTab('poules')">Phase de Groupes</button>
+            <button class="tab-btn" id="btn-arbre" onclick="switchTab('arbre')">Phase Finale</button>
+            <button class="tab-btn" id="btn-classement" onclick="switchTab('classement')">Classement Général</button>
+        </div>
+
+        <!-- TAB CONTENT: POULES -->
+        <div id="tab-content-poules">
+            <!-- GROUP PILLS -->
+            <div class="group-nav">
+                <button class="group-pill active" onclick="filterGroup('ALL')">Tous</button>
+                {% for g in groups_matches.keys() %}
+                <button class="group-pill" id="pill-{{ g }}" onclick="filterGroup('{{ g }}')">Groupe {{ g }}</button>
+                {% endfor %}
+            </div>
+
+            {% for group_letter, group_matches in groups_matches.items() %}
+            <div class="group-section" id="group-sec-{{ group_letter }}">
+                <div class="group-header">
+                    <span>🏆 Groupe {{ group_letter }}</span>
+                </div>
+
+                <div class="group-grid">
+                    <!-- Liste des matchs -->
+                    <div>
+                        {% for match in group_matches %}
+                        {% set has_result = match.result_real != '' and match.result_real is not none %}
+                        {% set is_correct = match.correct_prediction == '✓' %}
+                        <div class="match-card {% if has_result %}has-result{% endif %} {% if has_result and is_correct %}correct{% elif has_result %}wrong{% endif %}" id="card-{{ match.match_id }}">
+                            <div class="match-meta">
+                                <span class="match-date">{{ match.date }}</span>
+                                <span class="match-stage-badge">{{ match.stage }}</span>
+                            </div>
+
+                            <div class="match-teams">
+                                <div class="team-side home">
+                                    <div class="team-flag-name">
+                                        <span class="card-flag">{{ match.home_flag }}</span>
+                                        <span>{{ match.home_team }}</span>
+                                        {% set start_elo = base_elo_ratings[match.home_team]|int if base_elo_ratings.get(match.home_team) is not none else 1500 %}
+                                        {% set curr_elo = current_elo[match.home_team]|int if current_elo.get(match.home_team) is not none else 1500 %}
+                                        <span style="font-size:0.68rem; color:var(--text-muted); margin-left:6px; display:inline-flex; align-items:center; gap:3px;" title="Elo dynamique : {{ curr_elo }}">
+                                            ({{ curr_elo }})
+                                            {% if curr_elo > start_elo %}
+                                                <span style="color:var(--win-color);" title="En hausse (départ: {{ start_elo }})">●</span>
+                                            {% elif curr_elo < start_elo %}
+                                                <span style="color:var(--lose-color);" title="En baisse (départ: {{ start_elo }})">●</span>
+                                            {% else %}
+                                                <span style="color:var(--text-muted);">●</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <span class="card-code">{{ match.home_code }}</span>
+                                </div>
+
+                                <div class="score-middle {% if has_result and is_correct %}correct-text{% elif has_result %}wrong-text{% endif %}">
+                                    {% if has_result %}
+                                        {{ match.home_score_real }} – {{ match.away_score_real }}
+                                    {% else %}
+                                        vs
+                                    {% endif %}
+                                </div>
+
+                                <div class="team-side away">
+                                    <div class="team-flag-name">
+                                        <span class="card-flag">{{ match.away_flag }}</span>
+                                        <span>{{ match.away_team }}</span>
+                                        {% set start_elo = base_elo_ratings[match.away_team]|int if base_elo_ratings.get(match.away_team) is not none else 1500 %}
+                                        {% set curr_elo = current_elo[match.away_team]|int if current_elo.get(match.away_team) is not none else 1500 %}
+                                        <span style="font-size:0.68rem; color:var(--text-muted); margin-left:6px; display:inline-flex; align-items:center; gap:3px;" title="Elo dynamique : {{ curr_elo }}">
+                                            ({{ curr_elo }})
+                                            {% if curr_elo > start_elo %}
+                                                <span style="color:var(--win-color);" title="En hausse (départ: {{ start_elo }})">●</span>
+                                            {% elif curr_elo < start_elo %}
+                                                <span style="color:var(--lose-color);" title="En baisse (départ: {{ start_elo }})">●</span>
+                                            {% else %}
+                                                <span style="color:var(--text-muted);">●</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <span class="card-code">{{ match.away_code }}</span>
+                                </div>
+                            </div>
+
+                            <div class="elo-row">
+                                <span>Elo: {{ match.home_elo|int }}{% if match.home_elo_new %} ➔ {{ match.home_elo_new|int }}{% endif %}</span>
+                                <span>Elo: {{ match.away_elo|int }}{% if match.away_elo_new %} ➔ {{ match.away_elo_new|int }}{% endif %}</span>
+                            </div>
+
+                            <!-- PROBABILITÉS -->
+                            {% set p_home = match.p_home_win|float %}
+                            {% set p_draw = match.p_draw|float %}
+                            {% set p_away = match.p_away_win|float %}
+                            {% set max_p = [p_home, p_draw, p_away]|max %}
+                            <div class="prob-container">
+                                <div class="prob-item win-prob {% if p_home == max_p %}fav{% endif %}">
+                                    <div class="prob-label">{{ match.home_team.split(' ')[0] }}</div>
+                                    <div class="prob-val">{{ p_home }}%</div>
+                                </div>
+                                <div class="prob-item draw-prob {% if p_draw == max_p %}fav{% endif %}">
+                                    <div class="prob-label">Nul</div>
+                                    <div class="prob-val">{{ p_draw }}%</div>
+                                </div>
+                                <div class="prob-item lose-prob {% if p_away == max_p %}fav{% endif %}">
+                                    <div class="prob-label">{{ match.away_team.split(' ')[0] }}</div>
+                                    <div class="prob-val">{{ p_away }}%</div>
+                                </div>
+                            </div>
+
+                            {% if has_result %}
+                            <div style="text-align: center; margin-bottom: 14px; font-size: 0.72rem; font-weight: 600;">
+                                {% if match.correct_prediction == '✓' %}
+                                    <span style="color: var(--win-color); background: rgba(16, 185, 129, 0.08); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                        ✓ Prédiction vérifiée (IA correcte)
+                                    </span>
+                                {% else %}
+                                    <span style="color: var(--lose-color); background: rgba(239, 68, 68, 0.08); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                                        ✗ Prédiction erronée (IA incorrecte)
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <!-- FORMULAIRE DE SAISIE -->
+                            <form class="saisie-panel" onsubmit="saveScore(event, {{ match.match_id }})">
+                                <div class="saisie-inputs">
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.home_score_real }}{% else %}0{% endif %}" id="hs-{{ match.match_id }}">
+                                    <span style="font-weight:700;">–</span>
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.away_score_real }}{% else %}0{% endif %}" id="as-{{ match.match_id }}">
+                                </div>
+                                <button type="submit" class="btn-enregistrer">Enregistrer</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Tableau de classement du groupe -->
+                    <div class="standings-card">
+                        <div class="standings-title">Classement en direct</div>
+                        <table class="standings-table">
+                            <thead>
+                                <tr>
+                                    <th class="pos-col">#</th>
+                                    <th style="text-align: left;">Équipe</th>
+                                    <th>Pts</th>
+                                    <th>BP</th>
+                                    <th>BC</th>
+                                    <th>Diff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for team in standings[group_letter] %}
+                                <tr>
+                                    <td class="pos-col">{{ loop.index }}</td>
+                                    <td>
+                                        <div class="team-col">
+                                            <span>{{ team.flag }}</span>
+                                            <span>{{ team.team }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="pts-col">{{ team.points }}</td>
+                                    <td>{{ team.gf }}</td>
+                                    <td>{{ team.ga }}</td>
+                                    <td style="font-weight: 600; color: {% if team.gd > 0 %}var(--win-color){% elif team.gd < 0 %}var(--lose-color){% else %}var(--text-muted){% endif %};">
+                                        {% if team.gd > 0 %}+{% endif %}{{ team.gd }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- TAB CONTENT: ARBRE KNOCKOUT -->
+        <div id="tab-content-arbre" style="display: none;">
+            <div class="timeline-container">
+                {% set current_stage = namespace(name="") %}
+                {% for match in arbre_matches %}
+                    {% if match.stage != current_stage.name %}
+                        {% set current_stage.name = match.stage %}
+                        <div class="timeline-stage-title">{{ match.stage }}</div>
+                    {% endif %}
+
+                    {% set has_result = match.result_real != '' and match.result_real is not none %}
+                    {% set is_correct = match.correct_prediction == '✓' %}
+                    {% set determined = match.home_team != '' and match.away_team != '' %}
+
+                    <div class="match-card {% if has_result %}has-result{% endif %} {% if has_result and is_correct %}correct{% elif has_result %}wrong{% endif %}" id="card-{{ match.match_id }}">
+                        <div class="match-meta">
+                            <span class="match-date">{{ match.date }} · {{ match.city }}</span>
+                            <span class="match-stage-badge">Match #{{ match.match_number }}</span>
+                        </div>
+
+                        <div class="match-teams">
+                            <div class="team-side home">
+                                <div class="team-flag-name">
+                                    {% if match.home_team %}
+                                        <span class="card-flag">{{ match.home_flag }}</span>
+                                        <span>{{ match.home_team }}</span>
+                                        {% set start_elo = base_elo_ratings[match.home_team]|int if base_elo_ratings.get(match.home_team) is not none else 1500 %}
+                                        {% set curr_elo = current_elo[match.home_team]|int if current_elo.get(match.home_team) is not none else 1500 %}
+                                        <span style="font-size:0.68rem; color:var(--text-muted); margin-left:6px; display:inline-flex; align-items:center; gap:3px;" title="Elo dynamique : {{ curr_elo }}">
+                                            ({{ curr_elo }})
+                                            {% if curr_elo > start_elo %}
+                                                <span style="color:var(--win-color);" title="En hausse (départ: {{ start_elo }})">●</span>
+                                            {% elif curr_elo < start_elo %}
+                                                <span style="color:var(--lose-color);" title="En baisse (départ: {{ start_elo }})">●</span>
+                                            {% else %}
+                                                <span style="color:var(--text-muted);">●</span>
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="card-flag">🏳️</span>
+                                        <span style="color:var(--text-muted); font-style:italic;">{{ match.home_placeholder }}</span>
+                                    {% endif %}
+                                </div>
+                                <span class="card-code">{% if match.home_team %}{{ match.home_code }}{% endif %}</span>
+                            </div>
+
+                            <div class="score-middle {% if has_result and is_correct %}correct-text{% elif has_result %}wrong-text{% endif %}">
+                                {% if has_result %}
+                                    {{ match.home_score_real }} – {{ match.away_score_real }}
+                                    {% if match.home_score_real == match.away_score_real and match.shootout_winner %}
+                                        <div style="font-size:0.6rem; color:var(--win-color); margin-top:2px;">
+                                            TAB : {{ match.shootout_winner }}
+                                        </div>
+                                    {% endif %}
+                                {% else %}
+                                    vs
+                                {% endif %}
+                            </div>
+
+                            <div class="team-side away">
+                                <div class="team-flag-name">
+                                    {% if match.away_team %}
+                                        <span class="card-flag">{{ match.away_flag }}</span>
+                                        <span>{{ match.away_team }}</span>
+                                        {% set start_elo = base_elo_ratings[match.away_team]|int if base_elo_ratings.get(match.away_team) is not none else 1500 %}
+                                        {% set curr_elo = current_elo[match.away_team]|int if current_elo.get(match.away_team) is not none else 1500 %}
+                                        <span style="font-size:0.68rem; color:var(--text-muted); margin-left:6px; display:inline-flex; align-items:center; gap:3px;" title="Elo dynamique : {{ curr_elo }}">
+                                            ({{ curr_elo }})
+                                            {% if curr_elo > start_elo %}
+                                                <span style="color:var(--win-color);" title="En hausse (départ: {{ start_elo }})">●</span>
+                                            {% elif curr_elo < start_elo %}
+                                                <span style="color:var(--lose-color);" title="En baisse (départ: {{ start_elo }})">●</span>
+                                            {% else %}
+                                                <span style="color:var(--text-muted);">●</span>
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="card-flag">🏳️</span>
+                                        <span style="color:var(--text-muted); font-style:italic;">{{ match.away_placeholder }}</span>
+                                    {% endif %}
+                                </div>
+                                <span class="card-code">{% if match.away_team %}{{ match.away_code }}{% endif %}</span>
+                            </div>
+                        </div>
+
+                        {% if determined %}
+                            <div class="elo-row">
+                                <span>Elo: {{ match.home_elo|int }}{% if match.home_elo_new %} ➔ {{ match.home_elo_new|int }}{% endif %}</span>
+                                <span>Elo: {{ match.away_elo|int }}{% if match.away_elo_new %} ➔ {{ match.away_elo_new|int }}{% endif %}</span>
+                            </div>
+
+                            <!-- PROBABILITÉS -->
+                            {% set p_home = match.p_home_win|float %}
+                            {% set p_draw = match.p_draw|float %}
+                            {% set p_away = match.p_away_win|float %}
+                            {% set max_p = [p_home, p_draw, p_away]|max %}
+                            <div class="prob-container">
+                                <div class="prob-item win-prob {% if p_home == max_p %}fav{% endif %}">
+                                    <div class="prob-label">{{ match.home_team.split(' ')[0] }}</div>
+                                    <div class="prob-val">{{ p_home }}%</div>
+                                </div>
+                                <div class="prob-item draw-prob {% if p_draw == max_p %}fav{% endif %}">
+                                    <div class="prob-label">Nul</div>
+                                    <div class="prob-val">{{ p_draw }}%</div>
+                                </div>
+                                <div class="prob-item lose-prob {% if p_away == max_p %}fav{% endif %}">
+                                    <div class="prob-label">{{ match.away_team.split(' ')[0] }}</div>
+                                    <div class="prob-val">{{ p_away }}%</div>
+                                </div>
+                            </div>
+
+                            {% if has_result %}
+                            <div style="text-align: center; margin-bottom: 14px; font-size: 0.72rem; font-weight: 600;">
+                                {% if match.correct_prediction == '✓' %}
+                                    <span style="color: var(--win-color); background: rgba(16, 185, 129, 0.08); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                        ✓ Prédiction vérifiée (IA correcte)
+                                    </span>
+                                {% else %}
+                                    <span style="color: var(--lose-color); background: rgba(239, 68, 68, 0.08); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                                        ✗ Prédiction erronée (IA incorrecte)
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endif %}
+
+                        <!-- FORMULAIRE DE SAISIE AVEC DÉTECTION TAB -->
+                        {% if determined %}
+                        <form class="saisie-panel" onsubmit="saveScore(event, {{ match.match_id }})">
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <div class="saisie-inputs">
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.home_score_real }}{% else %}0{% endif %}" id="hs-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }}, '{{ match.home_team }}', '{{ match.away_team }}')">
+                                    <span style="font-weight:700;">–</span>
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.away_score_real }}{% else %}0{% endif %}" id="as-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }}, '{{ match.home_team }}', '{{ match.away_team }}')">
+                                </div>
+                                
+                                <div id="tab-container-{{ match.match_id }}" style="display: {% if (has_result and match.home_score_real == match.away_score_real) or not has_result %}block{% else %}none{% endif %};">
+                                    <span style="font-size:0.72rem; color:var(--text-muted);">Vainqueur TAB :</span>
+                                    <select class="tab-selector" id="sw-{{ match.match_id }}">
+                                        <option value="{{ match.home_team }}" {% if match.shootout_winner == match.home_team %}selected{% endif %}>{{ match.home_team }}</option>
+                                        <option value="{{ match.away_team }}" {% if match.shootout_winner == match.away_team %}selected{% endif %}>{{ match.away_team }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-enregistrer">Enregistrer</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- TAB CONTENT: CLASSEMENT GÉNÉRAL -->
+        <div id="tab-content-classement" style="display: none;">
+            <div class="standings-card" style="width: 100%; max-width: 100%; margin-top: 10px; margin-bottom: 30px;">
+                <div class="standings-title">Classement Général des Équipes (Elo Dynamique)</div>
+                <table class="standings-table" style="font-size: 0.9rem;">
+                    <thead>
+                        <tr>
+                            <th class="pos-col">#</th>
+                            <th style="text-align: left;">Équipe</th>
+                            <th>Elo Initial</th>
+                            <th>Elo Actuel</th>
+                            <th>Évolution</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in global_ranking %}
+                        <tr>
+                            <td class="pos-col">{{ loop.index }}</td>
+                            <td>
+                                <div class="team-col">
+                                    <span>{{ t.flag }}</span>
+                                    <strong>{{ t.team }}</strong>
+                                    <span style="font-size: 0.72rem; color: var(--text-muted);">{{ t.code }}</span>
+                                </div>
+                            </td>
+                            <td>{{ t.start_elo|int }}</td>
+                            <td style="font-weight: 700; color: #a5b4fc;">{{ t.current_elo|int }}</td>
+                            <td style="font-weight: 600; color: {% if t.diff > 0 %}var(--win-color){% elif t.diff < 0 %}var(--lose-color){% else %}var(--text-muted){% endif %};">
+                                {% if t.diff > 0 %}+{% endif %}{{ t.diff|int }}
+                            </td>
+                            <td>
+                                {% if 'Vainqueur' in t.status %}
+                                    <span style="color: var(--win-color); background: rgba(16, 185, 129, 0.15); padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">
+                                        {{ t.status }}
+                                    </span>
+                                {% elif 'Finaliste' in t.status or '3ème place' in t.status %}
+                                    <span style="color: var(--draw-color); background: rgba(245, 158, 11, 0.15); padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 0.75rem;">
+                                        {{ t.status }}
+                                    </span>
+                                {% elif 'En lice' in t.status %}
+                                    <span style="color: #cbd5e1; background: rgba(99, 102, 241, 0.15); padding: 3px 8px; border-radius: 6px; font-size: 0.75rem;">
+                                        {{ t.status }}
+                                    </span>
+                                {% else %}
+                                    <span style="color: var(--text-muted); background: rgba(255, 255, 255, 0.03); padding: 3px 8px; border-radius: 6px; font-size: 0.75rem;">
+                                        {{ t.status }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <footer>
+            Propulsé par Gemini &amp; Google Cloud Run · Modèle XGBoost Entraîné sur le Top 11 Joueurs (FotMob)
+        </footer>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-content-poules').style.display = tab === 'poules' ? 'block' : 'none';
+            document.getElementById('tab-content-arbre').style.display = tab === 'arbre' ? 'block' : 'none';
+            document.getElementById('tab-content-classement').style.display = tab === 'classement' ? 'block' : 'none';
+            document.getElementById('btn-' + tab).classList.add('active');
+            
+            // Conserver l'état de l'onglet dans le stockage local
+            localStorage.setItem('wc_active_tab', tab);
+        }
+
+        // Charger l'onglet actif au démarrage
+        const activeTab = localStorage.getItem('wc_active_tab') || 'poules';
+        switchTab(activeTab);
+
+        function filterGroup(group) {
+            document.querySelectorAll('.group-pill').forEach(p => p.classList.remove('active'));
+            if (group === 'ALL') {
+                document.querySelectorAll('.group-section').forEach(s => s.style.display = 'block');
+                document.querySelector('.group-pill[onclick="filterGroup(\'ALL\')"]').classList.add('active');
+            } else {
+                document.querySelectorAll('.group-section').forEach(s => s.style.display = 'none');
+                const activeSec = document.getElementById('group-sec-' + group);
+                if (activeSec) activeSec.style.display = 'block';
+                const activePill = document.getElementById('pill-' + group);
+                if (activePill) activePill.classList.add('active');
+            }
+            localStorage.setItem('wc_active_group', group);
+        }
+
+        const activeGroup = localStorage.getItem('wc_active_group') || 'ALL';
+        filterGroup(activeGroup);
+
+        function showToast(msg, ok = true) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.color = ok ? 'var(--win-color)' : 'var(--lose-color)';
+            t.style.borderColor = ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)';
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        function checkDraw(matchId, homeTeam, awayTeam) {
+            const hs = document.getElementById('hs-' + matchId).value;
+            const as = document.getElementById('as-' + matchId).value;
+            const container = document.getElementById('tab-container-' + matchId);
+            if (!container) return;
+            
+            if (hs !== '' && as !== '' && parseInt(hs) === parseInt(as)) {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function saveScore(e, matchId) {
+            e.preventDefault();
+            const hs = document.getElementById('hs-' + matchId).value.strip ? document.getElementById('hs-' + matchId).value.strip() : document.getElementById('hs-' + matchId).value;
+            const as = document.getElementById('as-' + matchId).value.strip ? document.getElementById('as-' + matchId).value.strip() : document.getElementById('as-' + matchId).value;
+            
+            if (hs === '' || as === '') {
+                showToast('Veuillez saisir les deux scores !', false);
+                return;
+            }
+            
+            const fd = new FormData();
+            fd.append('match_id', matchId);
+            fd.append('home_score', hs);
+            fd.append('away_score', as);
+            
+            const isKnockout = matchId >= 73;
+            if (isKnockout && parseInt(hs) === parseInt(as)) {
+                const sw = document.getElementById('sw-' + matchId).value;
+                fd.append('shootout_winner', sw);
+            }
+            
+            fetch('/update_result', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        showToast('✓ Résultat enregistré avec succès !');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showToast('Erreur : ' + data.message, false);
+                    }
+                })
+                .catch(() => showToast('Erreur réseau.', false));
+        }
+    </script>
+</body>
+
+</html>
