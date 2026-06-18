@@ -41,7 +41,7 @@ def gcs_read_text(blob_name):
     if bucket:
         try:
             blob = bucket.blob(blob_name)
-            return blob.download_as_text(encoding="utf-8")
+            return blob.download_as_text(encoding="utf-8-sig")
         except Exception as e:
             print(f"[GCS] Erreur lecture {blob_name} : {e}")
     return None
