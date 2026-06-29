@@ -755,8 +755,12 @@ def load_predictions():
         )
         
         if m.get("result_real", "") != "":
-            max_prob = max(m["p_home_win"], m["p_draw"], m["p_away_win"])
-            predicted = "W" if max_prob == m["p_home_win"] else ("D" if max_prob == m["p_draw"] else "L")
+            if mid >= 73:
+                # Phases finales : on compare uniquement p_home_win et p_away_win (pas de match nul)
+                predicted = "W" if m["p_home_win"] >= m["p_away_win"] else "L"
+            else:
+                max_prob = max(m["p_home_win"], m["p_draw"], m["p_away_win"])
+                predicted = "W" if max_prob == m["p_home_win"] else ("D" if max_prob == m["p_draw"] else "L")
             m["correct_prediction"] = "✓" if predicted == m["result_real"] else "✗"
         else:
             m["correct_prediction"] = ""

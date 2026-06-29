@@ -796,7 +796,7 @@
                                     {% endif %}
                                 {% else %}
                                     vs
-                                  {% endif %}
+                                {% endif %}
                             </div>
 
                             <div class="team-side away">
@@ -831,23 +831,25 @@
                                 <span>Elo: {{ match.away_elo|int }}{% if match.away_elo_new %} ➔ {{ match.away_elo_new|int }}{% endif %}</span>
                             </div>
 
-                            <!-- PROBABILITÉS -->
+                            <!-- PROBABILITÉS (Phase finale : exclure le nul et normaliser à 100%) -->
                             {% set p_home = match.p_home_win|float %}
-                            {% set p_draw = match.p_draw|float %}
                             {% set p_away = match.p_away_win|float %}
-                            {% set max_p = [p_home, p_draw, p_away]|max %}
-                            <div class="prob-container">
-                                <div class="prob-item win-prob {% if p_home == max_p %}fav{% endif %}">
+                            {% set total_p = p_home + p_away %}
+                            {% if total_p > 0 %}
+                                {% set p_home_show = ((p_home / total_p) * 100)|round(1) %}
+                                {% set p_away_show = ((p_away / total_p) * 100)|round(1) %}
+                            {% else %}
+                                {% set p_home_show = 50.0 %}
+                                {% set p_away_show = 50.0 %}
+                            {% endif %}
+                            <div class="prob-container" style="grid-template-columns: repeat(2, 1fr);">
+                                <div class="prob-item win-prob {% if p_home_show >= p_away_show %}fav{% endif %}">
                                     <div class="prob-label">{{ match.home_team.split(' ')[0] }}</div>
-                                    <div class="prob-val">{{ p_home }}%</div>
+                                    <div class="prob-val">{{ p_home_show }}%</div>
                                 </div>
-                                <div class="prob-item draw-prob {% if p_draw == max_p %}fav{% endif %}">
-                                    <div class="prob-label">Nul</div>
-                                    <div class="prob-val">{{ p_draw }}%</div>
-                                </div>
-                                <div class="prob-item lose-prob {% if p_away == max_p %}fav{% endif %}">
+                                <div class="prob-item lose-prob {% if p_away_show > p_home_show %}fav{% endif %}">
                                     <div class="prob-label">{{ match.away_team.split(' ')[0] }}</div>
-                                    <div class="prob-val">{{ p_away }}%</div>
+                                    <div class="prob-val">{{ p_away_show }}%</div>
                                 </div>
                             </div>
 
@@ -991,6 +993,7 @@
         const activeGroup = localStorage.getItem('wc_active_group') || 'ALL';
         filterGroup(activeGroup);
 
+        // Toast display logic
         function showToast(msg, ok = true) {
             const t = document.getElementById('toast');
             t.textContent = msg;
@@ -1000,8 +1003,8 @@
             setTimeout(() => t.classList.remove('show'), 2500);
         }
 
-        function checkDraw(matchId, homeTeam, awayTeam) {
-            if (matchId < 73) return; // Pas de TAB en phase de poule
+        function checkDraw(matchId) {
+            if (matchId < 73) return; // Pas de TAB en phase de poules
             const hs = document.getElementById('hs-' + matchId).value;
             const as = document.getElementById('as-' + matchId).value;
             const container = document.getElementById('tab-container-' + matchId);
