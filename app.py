@@ -700,7 +700,10 @@ def load_predictions():
         mid = int(m["match_id"])
         ht = m.get("home_team", "")
         at = m.get("away_team", "")
-        
+
+        # Exposer is_knockout au template pour l'affichage conditionnel
+        m["is_knockout"] = mid >= 73
+
         if not ht or not at:
             # Match de phase finale non déterminé
             m["p_home_win"] = 0.0
@@ -929,7 +932,7 @@ def update_result():
     match_id = request.form.get("match_id", "").strip()
     home_score = request.form.get("home_score", "").strip()
     away_score = request.form.get("away_score", "").strip()
-    shootout_winner = request.form.get("shootout_winner", "").strip() # 'home' ou 'away'
+    shootout_winner = request.form.get("shootout_winner", "").strip() # nom d'équipe, 'home' ou 'away'
 
     if not match_id or home_score == "" or away_score == "":
         return jsonify({"status": "error", "message": "Données manquantes"}), 400
@@ -949,13 +952,27 @@ def update_result():
     else:
         # Match nul
         if mid >= 73:
-            # Phase finale : TAB obligatoire
-            if shootout_winner == "home":
-                result = "W"
-            elif shootout_winner == "away":
-                result = "L"
-            else:
+            # Phase finale : TAB obligatoire.
+            # shootout_winner peut être : "home", "away", ou le nom de l'équipe (envoyé par le frontend).
+            # On résout en comparant avec les noms des équipes dans l'arbre.
+            if not shootout_winner:
                 return jsonify({"status": "error", "message": "Vainqueur de TAB manquant pour la phase finale"}), 400
+
+            # Récupérer les noms d'équipes pour ce match depuis l'arbre
+            arbre_data = read_json(ARBRE_PATH, GCS_ARBRE_BLOB)
+            arbre_match = next((x for x in arbre_data if int(x["match_id"]) == mid), None)
+            home_team_name = arbre_match["home_team"] if arbre_match else ""
+            away_team_name = arbre_match["away_team"] if arbre_match else ""
+
+            # Résoudre W/L selon la forme reçue ("home"/"away" ou nom d'équipe)
+            if shootout_winner == "home" or (home_team_name and shootout_winner == home_team_name):
+                result = "W"
+                shootout_winner = home_team_name or "home"  # normaliser vers le nom d'équipe
+            elif shootout_winner == "away" or (away_team_name and shootout_winner == away_team_name):
+                result = "L"
+                shootout_winner = away_team_name or "away"  # normaliser vers le nom d'équipe
+            else:
+                return jsonify({"status": "error", "message": f"Vainqueur de TAB invalide : '{shootout_winner}'"}), 400
         else:
             result = "D"
 

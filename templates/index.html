@@ -796,7 +796,7 @@
                                     {% endif %}
                                 {% else %}
                                     vs
-                                {% endif %}
+                                  {% endif %}
                             </div>
 
                             <div class="team-side away">
@@ -871,12 +871,12 @@
                         <form class="saisie-panel" onsubmit="saveScore(event, {{ match.match_id }})">
                             <div style="display:flex; flex-direction:column; gap:8px;">
                                 <div class="saisie-inputs">
-                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.home_score_real }}{% else %}0{% endif %}" id="hs-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }}, '{{ match.home_team }}', '{{ match.away_team }}')">
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.home_score_real }}{% else %}0{% endif %}" id="hs-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }})">
                                     <span style="font-weight:700;">–</span>
-                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.away_score_real }}{% else %}0{% endif %}" id="as-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }}, '{{ match.home_team }}', '{{ match.away_team }}')">
+                                    <input type="number" class="input-score" min="0" max="25" placeholder="0" value="{% if has_result %}{{ match.away_score_real }}{% else %}0{% endif %}" id="as-{{ match.match_id }}" oninput="checkDraw({{ match.match_id }})">
                                 </div>
                                 
-                                <div id="tab-container-{{ match.match_id }}" style="display: {% if (has_result and match.home_score_real == match.away_score_real) or not has_result %}block{% else %}none{% endif %};">
+                                <div id="tab-container-{{ match.match_id }}" style="display: {% if has_result and match.home_score_real|string == match.away_score_real|string %}block{% else %}none{% endif %};">
                                     <span style="font-size:0.72rem; color:var(--text-muted);">Vainqueur TAB :</span>
                                     <select class="tab-selector" id="sw-{{ match.match_id }}">
                                         <option value="{{ match.home_team }}" {% if match.shootout_winner == match.home_team %}selected{% endif %}>{{ match.home_team }}</option>
@@ -1001,22 +1001,18 @@
         }
 
         function checkDraw(matchId, homeTeam, awayTeam) {
+            if (matchId < 73) return; // Pas de TAB en phase de poule
             const hs = document.getElementById('hs-' + matchId).value;
             const as = document.getElementById('as-' + matchId).value;
             const container = document.getElementById('tab-container-' + matchId);
             if (!container) return;
-            
-            if (hs !== '' && as !== '' && parseInt(hs) === parseInt(as)) {
-                container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
-            }
+            container.style.display = (hs !== '' && as !== '' && parseInt(hs) === parseInt(as)) ? 'block' : 'none';
         }
 
         function saveScore(e, matchId) {
             e.preventDefault();
-            const hs = document.getElementById('hs-' + matchId).value.strip ? document.getElementById('hs-' + matchId).value.strip() : document.getElementById('hs-' + matchId).value;
-            const as = document.getElementById('as-' + matchId).value.strip ? document.getElementById('as-' + matchId).value.strip() : document.getElementById('as-' + matchId).value;
+            const hs = document.getElementById('hs-' + matchId).value.trim ? document.getElementById('hs-' + matchId).value.trim() : document.getElementById('hs-' + matchId).value;
+            const as = document.getElementById('as-' + matchId).value.trim ? document.getElementById('as-' + matchId).value.trim() : document.getElementById('as-' + matchId).value;
             
             if (hs === '' || as === '') {
                 showToast('Veuillez saisir les deux scores !', false);
@@ -1030,8 +1026,12 @@
             
             const isKnockout = matchId >= 73;
             if (isKnockout && parseInt(hs) === parseInt(as)) {
-                const sw = document.getElementById('sw-' + matchId).value;
-                fd.append('shootout_winner', sw);
+                const swEl = document.getElementById('sw-' + matchId);
+                if (!swEl || !swEl.value) {
+                    showToast('⚠️ Score nul en KO : sélectionnez le vainqueur (Prol./TAB) !', false);
+                    return;
+                }
+                fd.append('shootout_winner', swEl.value); // Envoie le nom de l'équipe
             }
             
             fetch('/update_result', { method: 'POST', body: fd })
